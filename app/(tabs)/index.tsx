@@ -1,0 +1,337 @@
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Card } from '@/components/ui/card';
+import { FAB } from '@/components/ui/fab';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { storageService } from '@/services/storage';
+import { Student } from '@/types';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Dimensions, Image, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function TodayDateHeader() {
+  const today = new Date();
+  const weekday = today.toLocaleDateString('en-US', { weekday: 'long' });
+  const day = today.getDate();
+  const month = today.toLocaleDateString('en-US', { month: 'long' });
+  
+  const getOrdinalSuffix = (num: number): string => {
+    const j = num % 10;
+    const k = num % 100;
+    if (j === 1 && k !== 11) return num + 'st';
+    if (j === 2 && k !== 12) return num + 'nd';
+    if (j === 3 && k !== 13) return num + 'rd';
+    return num + 'th';
+  };
+
+  return (
+    <Card style={styles.dateCard}>
+      <ThemedText type="title" style={styles.dateText}>
+        {weekday}, {getOrdinalSuffix(day)} {month}
+      </ThemedText>
+    </Card>
+  );
+}
+
+function TodayStudentCard({ student, onPress, onEditSchedule }: { student: Student; onPress: () => void; onEditSchedule: () => void }) {
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
+
+  useEffect(() => {
+    const updateTimeRemaining = () => {
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
+      
+      if (!student.weekdays.includes(weekdayName) || !student.times?.[weekdayName]) {
+        setTimeRemaining('');
+        return;
+      }
+
+      const timeStr = student.times[weekdayName];
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const classTime = new Date();
+      classTime.setHours(hours, minutes, 0, 0);
+
+      const now = new Date();
+      let diff = classTime.getTime() - now.getTime();
+
+      if (diff < 0) {
+        setTimeRemaining('Class time started');
+        return;
+      }
+
+      const hoursRemaining = Math.floor(diff / (1000 * 60 * 60));
+      const minutesRemaining = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hoursRemaining > 0) {
+        setTimeRemaining(`${hoursRemaining}h ${minutesRemaining}m remaining`);
+      } else {
+        setTimeRemaining(`${minutesRemaining}m remaining`);
+      }
+    };
+
+    updateTimeRemaining();
+    const interval = setInterval(updateTimeRemaining, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [student]);
+
+  const getTodayTime = (): string => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
+    
+    if (!student.times?.[weekdayName]) return '';
+    
+    const timeStr = student.times[weekdayName];
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  return (
+    <Card onPress={onPress} elevated style={styles.todayCard}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.avatar, { backgroundColor: colors.tint + '20' }]}>
+          <ThemedText style={[styles.avatarText, { color: colors.tint }]}>
+            {student.name.charAt(0).toUpperCase()}
+          </ThemedText>
+        </View>
+        <View style={styles.cardHeaderContent}>
+          <ThemedText type="subtitle" style={styles.studentName}>
+            {student.name}
+          </ThemedText>
+          <View style={styles.timeRow}>
+            <IconSymbol name="clock.fill" size={14} color={colors.textSecondary} />
+            <ThemedText style={[styles.classTime, { color: colors.textSecondary }]}>
+              {getTodayTime()}
+            </ThemedText>
+          </View>
+          {timeRemaining && (
+            <View style={styles.timeRemainingRow}>
+              <ThemedText style={[styles.timeRemaining, { color: colors.tint }]}>
+                {timeRemaining}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            onEditSchedule();
+          }}
+          style={styles.editButton}>
+          <IconSymbol name="pencil" size={20} color={colors.tint} />
+        </TouchableOpacity>
+      </View>
+    </Card>
+  );
+}
+
+export default function OverviewScreen() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
+  const screenHeight = Dimensions.get('window').height;
+
+  const loadStudents = async () => {
+    const data = await storageService.getStudents();
+    setStudents(data);
+  };
+
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  // Reload data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadStudents();
+    }, [])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadStudents();
+    setRefreshing(false);
+  };
+
+  const todayStudents = useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
+    
+    return students.filter(student => 
+      student.weekdays.includes(weekdayName) && student.times?.[weekdayName]
+    );
+  }, [students]);
+  const tabBarHeight = 20 + insets.bottom;
+  const fabBottomPosition = tabBarHeight; // Positioned at the bottom navigation bar level
+
+  return (
+    <ThemedView style={[styles.container, { paddingTop: insets.top, minHeight: screenHeight }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content, 
+          { 
+            paddingBottom: tabBarHeight + 100,
+            minHeight: screenHeight - insets.top - tabBarHeight
+          }
+        ]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <TodayDateHeader />
+        
+        <View style={styles.sectionHeader}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Today&apos;s Classes
+          </ThemedText>
+          {todayStudents.length === 0 && (
+            <View style={styles.noClassesCard}>
+              <View style={styles.imageWrapper}>
+                <Image 
+                  source={require('@/assets/images/no_class.jpg')} 
+                  style={styles.noClassImage}
+                  resizeMode="cover"
+                />
+              </View>
+              <ThemedText style={[styles.noClassesText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+                No classes scheduled for today
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        {todayStudents.map((student) => (
+          <TodayStudentCard
+            key={student.id}
+            student={student}
+            onPress={() => router.push(`/student/${student.id}`)}
+            onEditSchedule={() => router.push(`/edit-student/${student.id}`)}
+          />
+        ))}
+      </ScrollView>
+      <FAB
+        icon="plus"
+        style={[styles.fab, { bottom: fabBottomPosition }] as any}
+        onPress={() => router.push('/add-student')}
+      />
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
+    gap: 16,
+    paddingBottom: 20,
+  },
+  dateCard: {
+    marginBottom: 16,
+    padding: 20,
+  },
+  dateText: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  sectionHeader: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontWeight: '700',
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  noClassesCard: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  imageWrapper: {
+    width: 280,
+    height: 280,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  noClassImage: {
+    width: '100%',
+    height: '100%',
+  },
+  noClassesText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  todayCard: {
+    marginBottom: 12,
+    padding: 18,
+    borderRadius: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  cardHeaderContent: {
+    flex: 1,
+  },
+  studentName: {
+    fontWeight: '700',
+    marginBottom: 6,
+    fontSize: 18,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  classTime: {
+    fontSize: 14,
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  timeRemainingRow: {
+    marginTop: 4,
+  },
+  timeRemaining: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  editButton: {
+    padding: 8,
+  },
+  fab: {
+    position: 'absolute',
+    marginRight: 16,
+    right: 0
+  },
+});
