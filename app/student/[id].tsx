@@ -6,12 +6,11 @@ import { Chip } from '@/components/ui/chip';
 import { FAB } from '@/components/ui/fab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/input';
-import { ListItem } from '@/components/ui/list-item';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { storageService } from '@/services/storage';
-import { ClassEntry, Student } from '@/types';
+import { ClassEntry, Student, FeeEntry } from '@/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -35,18 +34,20 @@ const StudentHeaderContent = ({
   router, 
   progress, 
   isComplete, 
-  classCount, 
+  totalClasses, 
   remaining,
-  classesPerCycle
+  classesPerCycle,
+  initialClasses
 }: { 
   student: Student; 
   id: string | string[] | undefined; 
   router: any; 
   progress: number; 
   isComplete: boolean; 
-  classCount: number; 
+  totalClasses: number; 
   remaining: number;
   classesPerCycle: number;
+  initialClasses: number;
 }) => {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -94,15 +95,14 @@ const StudentHeaderContent = ({
         style={styles.progressBar}
       />
       <ThemedText type="subtitle" style={styles.progressText}>
-        {classCount} / {classesPerCycle} classes
+        {totalClasses} / {classesPerCycle} classes
+        {initialClasses > 0 && (
+          <ThemedText style={[styles.initialClassesText, { color: colors.textSecondary }]}>
+            {' '}({initialClasses} initial)
+          </ThemedText>
+        )}
       </ThemedText>
-      {isComplete ? (
-        <View style={styles.chipContainer}>
-          <Chip style={[styles.completeChip, { backgroundColor: colors.success }] as any}>
-            <ThemedText style={styles.completeChipText}>✓ Fee Due!</ThemedText>
-          </Chip>
-        </View>
-      ) : (
+      {!isComplete && (
         <ThemedText style={[styles.remainingText, { color: colors.textSecondary }]}>
           {remaining} classes remaining
         </ThemedText>
@@ -173,6 +173,29 @@ export default function StudentDetailScreen() {
   };
 
   const handleAddClass = () => {
+    // Check if cycle is complete
+    if (student) {
+      const classCount = classEntries.length;
+      const classesPerCycle = student.classesPerCycle || 12;
+      const initialClasses = student.initialClassesCompleted || 0;
+      const totalClasses = classCount + initialClasses;
+      
+      if (totalClasses >= classesPerCycle) {
+        Alert.alert(
+          'Cycle Complete',
+          'This cycle is already complete. Please reset the cycle to start a new one.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Reset Cycle',
+              onPress: handleResetEntries,
+            },
+          ]
+        );
+        return;
+      }
+    }
+    
     // Open modal to add entry with notes
     setEntryTopics('');
     setEntryRemarks('');
@@ -180,7 +203,30 @@ export default function StudentDetailScreen() {
   };
 
   const handleSaveEntry = async () => {
+    if (!student) return;
+    
     const today = new Date().toISOString().split('T')[0];
+    const classCount = classEntries.length;
+    const classesPerCycle = student.classesPerCycle || 12;
+    const initialClasses = student.initialClassesCompleted || 0;
+    const totalClasses = classCount + initialClasses;
+
+    // Check if cycle is complete before adding
+    if (totalClasses >= classesPerCycle) {
+      Alert.alert(
+        'Cycle Complete',
+        'This cycle is already complete. Please reset the cycle to start a new one.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reset Cycle',
+            onPress: handleResetEntries,
+          },
+        ]
+      );
+      setShowAddEntryModal(false);
+      return;
+    }
 
     try {
       const newEntry: ClassEntry = {
@@ -192,6 +238,33 @@ export default function StudentDetailScreen() {
         remarks: entryRemarks.trim() || undefined,
       };
       await storageService.saveClassEntry(newEntry);
+      
+      // Check if cycle is now complete after adding this entry
+      const newTotalClasses = totalClasses + 1;
+      if (newTotalClasses >= classesPerCycle && student.tuitionFee) {
+        // Check if fee entry already exists for this month/cycle
+        const now = new Date();
+        const month = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const existingFees = await storageService.getFeeEntries(student.id);
+        const existingFeeForMonth = existingFees.find(
+          fee => fee.month === month && fee.studentId === student.id
+        );
+        
+        // Only create fee entry if it doesn't already exist
+        if (!existingFeeForMonth) {
+          const feeEntry: FeeEntry = {
+            id: Date.now().toString() + '_fee',
+            studentId: student.id,
+            studentName: student.name,
+            amount: student.tuitionFee,
+            month: month,
+            date: today,
+            createdAt: new Date().toISOString(),
+          };
+          await storageService.saveFeeEntry(feeEntry);
+        }
+      }
+      
       await loadData();
       setShowAddEntryModal(false);
       setEntryTopics('');
@@ -238,33 +311,59 @@ export default function StudentDetailScreen() {
 
   const classCount = classEntries.length;
   const classesPerCycle = student.classesPerCycle || 12;
-  const progress = Math.min(classCount / classesPerCycle, 1);
-  const isComplete = classCount >= classesPerCycle;
-  const remaining = Math.max(0, classesPerCycle - classCount);
+  const initialClasses = student.initialClassesCompleted || 0;
+  const totalClasses = classCount + initialClasses;
+  const progress = Math.min(totalClasses / classesPerCycle, 1);
+  const isComplete = totalClasses >= classesPerCycle;
+  const remaining = Math.max(0, classesPerCycle - totalClasses);
 
-  const formatDate = (dateString: string) => {
+
+  // Sort entries by date (newest first), then by creation time
+  const sortedEntries = [...classEntries].sort((a, b) => {
+    const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+    if (dateCompare !== 0) return dateCompare;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  // Assign entry numbers (1, 2, 3, etc.) - can be edited
+  const entriesWithNumbers = sortedEntries.map((entry, index) => ({
+    ...entry,
+    entryNumber: index + 1,
+  }));
+
+  const formatDateTime = (dateString: string, createdAt: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
+    const created = new Date(createdAt);
+    const dateStr = date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
+      year: 'numeric',
     });
+    const timeStr = created.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return { dateStr, timeStr };
   };
 
-  // Group entries by date
-  const entriesByDate = classEntries.reduce((acc, entry) => {
-    if (!acc[entry.date]) {
-      acc[entry.date] = [];
-    }
-    acc[entry.date].push(entry);
-    return acc;
-  }, {} as Record<string, ClassEntry[]>);
-
-  // Get unique dates sorted (newest first)
-  const uniqueDates = Object.keys(entriesByDate).sort((a, b) => 
-    new Date(b).getTime() - new Date(a).getTime()
-  );
+  const handleDeleteEntry = async (entry: ClassEntry) => {
+    Alert.alert(
+      'Delete Entry',
+      'Are you sure you want to delete this entry?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await storageService.deleteClassEntry(entry.id);
+            await loadData();
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
@@ -279,9 +378,10 @@ export default function StudentDetailScreen() {
             router={router}
             progress={progress}
             isComplete={isComplete}
-            classCount={classCount}
+            totalClasses={totalClasses}
             remaining={remaining}
             classesPerCycle={classesPerCycle}
+            initialClasses={initialClasses}
           />
         </Card>
 
@@ -303,82 +403,120 @@ export default function StudentDetailScreen() {
           {classEntries.length === 0 ? (
             <EmptyEntriesState />
           ) : (
-            uniqueDates.map((date) => {
-              const entriesForDate = entriesByDate[date];
-              const entryCount = entriesForDate.length;
-              
-              // Get unique topics and remarks from entries (if any)
-              const allTopics = entriesForDate.map(e => e.topics).filter(Boolean);
-              const allRemarks = entriesForDate.map(e => e.remarks).filter(Boolean);
-              const hasNotes = allTopics.length > 0 || allRemarks.length > 0;
-
-              return (
-                <View key={date} style={styles.dateEntryContainer}>
-                  <ListItem
-                    title={formatDate(date)}
-                    leftText={entryCount.toString()}
-                    rightIcon="trash"
-                    onRightPress={() => {
-                      // Delete all entries for this date
-                      Alert.alert(
-                        'Delete Entries',
-                        `Delete ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} for this date?`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Delete',
-                            style: 'destructive',
-                            onPress: async () => {
-                              for (const entry of entriesForDate) {
-                                await storageService.deleteClassEntry(entry.id);
-                              }
-                              await loadData();
-                            },
-                          },
-                        ]
-                      );
-                    }}
-                    style={styles.listItem}
-                  />
-                  {hasNotes && (
-                    <View style={[
-                      styles.notesContainer, 
-                      { 
-                        backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
-                        borderColor: Colors[colorScheme ?? 'light'].border,
-                      }
-                    ]}>
-                      {allTopics.length > 0 && (
-                        <View style={styles.noteSection}>
-                          <ThemedText style={[styles.noteLabel, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
-                            Topics:
-                          </ThemedText>
-                          <ThemedText style={[styles.noteText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                            {allTopics.join(', ')}
-                          </ThemedText>
-                        </View>
-                      )}
-                      {allRemarks.length > 0 && (
-                        <View style={styles.noteSection}>
-                          <ThemedText style={[styles.noteLabel, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
-                            Remarks:
-                          </ThemedText>
-                          <ThemedText style={[styles.noteText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                            {allRemarks.join(' • ')}
-                          </ThemedText>
-                        </View>
-                      )}
-                    </View>
-                  )}
+            <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
+              <View style={styles.tableContainer}>
+                {/* Table Header */}
+                <View style={[styles.tableRow, styles.tableHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '20' }]}>
+                  <View style={[styles.tableCellHeader, styles.colEntryNumber]}>
+                    <ThemedText style={[styles.tableHeaderText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                      #
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.tableCellHeader, styles.colDateTime]}>
+                    <ThemedText style={[styles.tableHeaderText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                      Date & Time
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.tableCellHeader, styles.colTopics]}>
+                    <ThemedText style={[styles.tableHeaderText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                      Topics
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.tableCellHeader, styles.colRemarks]}>
+                    <ThemedText style={[styles.tableHeaderText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                      Remarks
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.tableCellHeader, styles.colDelete]}>
+                    <ThemedText style={[styles.tableHeaderText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                      Delete
+                    </ThemedText>
+                  </View>
                 </View>
-              );
-            })
+
+                {/* Table Rows */}
+                {entriesWithNumbers.map((entry) => {
+                  const { dateStr, timeStr } = formatDateTime(entry.date, entry.createdAt);
+
+                  return (
+                    <View 
+                      key={entry.id} 
+                      style={[
+                        styles.tableRow, 
+                        { borderBottomColor: Colors[colorScheme ?? 'light'].border }
+                      ]}
+                    >
+                      {/* Entry Number */}
+                      <View style={[styles.tableCell, styles.colEntryNumber]}>
+                        <ThemedText style={[styles.tableCellText, { color: Colors[colorScheme ?? 'light'].tint, fontWeight: '600' }]}>
+                          {entry.entryNumber}
+                        </ThemedText>
+                      </View>
+
+                      {/* Date & Time */}
+                      <View style={[styles.tableCell, styles.colDateTime]}>
+                        <ThemedText 
+                          style={styles.tableCellText}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                        >
+                          {dateStr}
+                        </ThemedText>
+                        <ThemedText 
+                          style={[styles.tableCellTextSmall, { color: Colors[colorScheme ?? 'light'].textSecondary }]}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                        >
+                          {timeStr}
+                        </ThemedText>
+                      </View>
+
+                      {/* Topics */}
+                      <View style={[styles.tableCell, styles.colTopics]}>
+                        <ThemedText 
+                          style={[styles.tableCellText, { 
+                            color: entry.topics ? Colors[colorScheme ?? 'light'].text : Colors[colorScheme ?? 'light'].textSecondary 
+                          }]}
+                          numberOfLines={4}
+                          ellipsizeMode="tail"
+                        >
+                          {entry.topics || '-'}
+                        </ThemedText>
+                      </View>
+
+                      {/* Remarks */}
+                      <View style={[styles.tableCell, styles.colRemarks]}>
+                        <ThemedText 
+                          style={[styles.tableCellText, { 
+                            color: entry.remarks ? Colors[colorScheme ?? 'light'].text : Colors[colorScheme ?? 'light'].textSecondary 
+                          }]}
+                          numberOfLines={4}
+                          ellipsizeMode="tail"
+                        >
+                          {entry.remarks || '-'}
+                        </ThemedText>
+                      </View>
+
+                      {/* Delete Action */}
+                      <View style={[styles.tableCell, styles.colDelete]}>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteEntry(entry)}
+                          style={[styles.actionButton, { backgroundColor: Colors[colorScheme ?? 'light'].error + '20' }]}
+                        >
+                          <IconSymbol name="trash" size={16} color={Colors[colorScheme ?? 'light'].error} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
           )}
         </Card>
       </ScrollView>
       <FAB 
         icon="plus" 
-        style={[styles.fab, { bottom: insets.bottom + 16 }] as any} 
+        style={[styles.fab, { bottom: 60 + insets.bottom + 16 }] as any} 
         onPress={handleAddClass} 
       />
 
@@ -651,5 +789,78 @@ const styles = StyleSheet.create({
   noteText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  tableScrollView: {
+    marginHorizontal: -16,
+  },
+  tableContainer: {
+    minWidth: 800,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    minHeight: 60,
+  },
+  tableHeader: {
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+  },
+  tableCellHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    overflow: 'hidden',
+  },
+  tableHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    textAlign: 'left',
+  },
+  tableCell: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0, 0, 0, 0.1)',
+    overflow: 'hidden',
+  },
+  colEntryNumber: {
+    width: 60,
+  },
+  colDateTime: {
+    width: 180,
+  },
+  colTopics: {
+    width: 250,
+  },
+  colRemarks: {
+    width: 250,
+  },
+  colDelete: {
+    width: 80,
+  },
+  tableCellText: {
+    fontSize: 14,
+    lineHeight: 20,
+    flexWrap: 'wrap',
+  },
+  tableCellTextSmall: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  initialClassesText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
   },
 });

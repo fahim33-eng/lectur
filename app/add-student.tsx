@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { TimePicker } from '@/components/ui/time-picker';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { notificationService } from '@/services/notifications';
 import { storageService } from '@/services/storage';
 import { Student } from '@/types';
@@ -20,6 +22,8 @@ export default function AddStudentScreen() {
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [times, setTimes] = useState<Record<string, string>>({});
   const [classesPerCycle, setClassesPerCycle] = useState<string>('12');
+  const [initialClassesCompleted, setInitialClassesCompleted] = useState<string>('0');
+  const [tuitionFee, setTuitionFee] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -74,6 +78,27 @@ export default function AddStudentScreen() {
       return;
     }
 
+    const initialClassesNum = parseInt(initialClassesCompleted, 10);
+    if (isNaN(initialClassesNum) || initialClassesNum < 0) {
+      Alert.alert('Error', 'Please enter a valid number of initial classes completed (minimum 0)');
+      return;
+    }
+
+    if (initialClassesNum > classesPerCycleNum) {
+      Alert.alert('Error', 'Initial classes completed cannot exceed classes per cycle');
+      return;
+    }
+
+    // Validate tuition fee if provided
+    let tuitionFeeNum: number | undefined;
+    if (tuitionFee.trim()) {
+      tuitionFeeNum = parseFloat(tuitionFee);
+      if (isNaN(tuitionFeeNum) || tuitionFeeNum < 0) {
+        Alert.alert('Error', 'Please enter a valid tuition fee (minimum 0)');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const newStudent: Student = {
@@ -82,6 +107,8 @@ export default function AddStudentScreen() {
         weekdays: selectedDays,
         times: times,
         classesPerCycle: classesPerCycleNum,
+        initialClassesCompleted: initialClassesNum,
+        tuitionFee: tuitionFeeNum,
         createdAt: new Date().toISOString(),
       };
       await storageService.saveStudent(newStudent);
@@ -151,15 +178,43 @@ export default function AddStudentScreen() {
           )}
 
           <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Classes Per Cycle
+            Classes Per Month
           </ThemedText>
           <Input
-            label="Number of Classes per Cycle/Month"
+            label="Number of Classes per Month"
             value={classesPerCycle}
             onChangeText={setClassesPerCycle}
             placeholder="e.g., 12"
             keyboardType="numeric"
           />
+
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Initial Progress
+          </ThemedText>
+          <Input
+            label="Classes Already Completed (Optional)"
+            value={initialClassesCompleted}
+            onChangeText={setInitialClassesCompleted}
+            placeholder="e.g., 4"
+            keyboardType="numeric"
+          />
+          <ThemedText style={[styles.hintText, { color: Colors[useColorScheme() ?? 'light'].textSecondary }]}>
+            If you&apos;ve already taken some classes before adding this student, enter the number here.
+          </ThemedText>
+
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Tuition Fee
+          </ThemedText>
+          <Input
+            label="Monthly Tuition Fee (Optional)"
+            value={tuitionFee}
+            onChangeText={setTuitionFee}
+            placeholder="e.g., 5000"
+            keyboardType="numeric"
+          />
+          <ThemedText style={[styles.hintText, { color: Colors[useColorScheme() ?? 'light'].textSecondary }]}>
+            Enter the monthly tuition fee for this student. This will be used for fee tracking.
+          </ThemedText>
 
           <Button
             title="Save Student"
@@ -204,5 +259,11 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 28,
+  },
+  hintText: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
 });

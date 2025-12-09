@@ -143,19 +143,26 @@ export const notificationService = {
 
   async rescheduleAllNotifications(): Promise<void> {
     if (!this.isAvailable()) {
-      console.log('Notifications not available - skipping reschedule');
       return;
     }
 
     try {
+      // Use Promise.allSettled to prevent one failure from blocking others
       await this.cancelAllNotifications();
       const students = await storageService.getStudents();
       
-      for (const student of students) {
-        await this.scheduleNotificationsForStudent(student);
-      }
+      // Schedule notifications in parallel with error handling
+      const promises = students.map(student => 
+        this.scheduleNotificationsForStudent(student).catch(error => {
+          console.log(`Error scheduling notifications for ${student.name}:`, error);
+          return null; // Continue with other students
+        })
+      );
+      
+      await Promise.allSettled(promises);
     } catch (error) {
       console.log('Error rescheduling notifications:', error);
+      // Don't throw - allow app to continue
     }
   },
 

@@ -93,6 +93,25 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="fees"
+        options={{
+          title: 'Fees',
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={require('@/assets/images/fees.png')}
+              style={[
+                styles.tabIcon,
+                { 
+                  opacity: focused ? 1 : 0.6,
+                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                },
+              ]}
+              resizeMode="contain"
+            />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

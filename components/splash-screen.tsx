@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
-import { View, StyleSheet, Text, Image } from 'react-native';
-import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import * as SplashScreen from 'expo-splash-screen';
+import LottieView from 'lottie-react-native';
+import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -12,7 +13,9 @@ export function SplashScreenComponent() {
   useEffect(() => {
     // Hide splash screen after a short delay
     const timer = setTimeout(() => {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {
+        // Ignore errors hiding splash screen
+      });
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -23,10 +26,11 @@ export function SplashScreenComponent() {
   return (
     <View style={[styles.container, { backgroundColor: gradientColor }]}>
       <View style={styles.content}>
-        <Image 
-          source={require('@/assets/images/icon.png')} 
-          style={styles.icon}
-          resizeMode="contain"
+        <LottieView
+          source={require('@/assets/images/splash.json')}
+          autoPlay
+          loop
+          style={styles.animation}
         />
         <Text style={styles.appName}>
           Lectur
@@ -48,9 +52,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  icon: {
-    width: 120,
-    height: 120,
+  animation: {
+    width: 200,
+    height: 200,
     marginBottom: 24,
   },
   appName: {

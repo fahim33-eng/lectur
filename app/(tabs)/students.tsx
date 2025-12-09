@@ -66,8 +66,8 @@ export default function StudentsScreen() {
     setRefreshing(false);
   };
 
-  const tabBarHeight = 20 + insets.bottom;
-  const fabBottomPosition = tabBarHeight; // Positioned at the bottom navigation bar level
+  const tabBarHeight = 60 + insets.bottom; // Match tab bar height from _layout.tsx
+  const fabBottomPosition = tabBarHeight + 16; // 16px above tab bar for consistent positioning
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top, minHeight: screenHeight }]}>
@@ -125,8 +125,10 @@ function StudentCard({ student, onPress, onEditSchedule }: { student: Student; o
   );
 
   const classesPerCycle = student.classesPerCycle || 12;
-  const progress = Math.min(classCount / classesPerCycle, 1);
-  const isComplete = classCount >= classesPerCycle;
+  const initialClasses = student.initialClassesCompleted || 0;
+  const totalClasses = classCount + initialClasses;
+  const progress = Math.min(totalClasses / classesPerCycle, 1);
+  const isComplete = totalClasses >= classesPerCycle;
 
   const formatTimes = (): string => {
     if (student.times) {
@@ -171,11 +173,6 @@ function StudentCard({ student, onPress, onEditSchedule }: { student: Student; o
           style={styles.editButton}>
           <IconSymbol name="pencil" size={20} color={colors.tint} />
         </TouchableOpacity>
-        {isComplete && (
-          <View style={[styles.badge, { backgroundColor: colors.success }]}>
-            <ThemedText style={styles.badgeText}>Fee Due</ThemedText>
-          </View>
-        )}
       </View>
       <View style={styles.progressSection}>
         <View style={styles.progressHeader}>
@@ -183,7 +180,7 @@ function StudentCard({ student, onPress, onEditSchedule }: { student: Student; o
             Progress
           </ThemedText>
           <ThemedText style={[styles.progressValue, { color: colors.text }]}>
-            {classCount} / {classesPerCycle}
+            {totalClasses} / {classesPerCycle}
           </ThemedText>
         </View>
         <ProgressBar 

@@ -6,7 +6,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { storageService } from '@/services/storage';
-import { Student } from '@/types';
+import { OneTimeSchedule, Student } from '@/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -37,24 +37,24 @@ function TodayDateHeader() {
   );
 }
 
-function TodayStudentCard({ student, onPress, onEditSchedule }: { student: Student; onPress: () => void; onEditSchedule: () => void }) {
+function TodayStudentCard({ student, time, isOneTime, onPress, onEditSchedule }: { student: Student; time: string; isOneTime: boolean; onPress: () => void; onEditSchedule: () => void }) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [timeRemaining, setTimeRemaining] = useState<string>('');
 
   useEffect(() => {
-    const updateTimeRemaining = () => {
-      const today = new Date();
-      const dayOfWeek = today.getDay();
-      const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
-      
-      if (!student.weekdays.includes(weekdayName) || !student.times?.[weekdayName]) {
+    const updateTimeRemaining = async () => {
+      if (!time) {
         setTimeRemaining('');
         return;
       }
 
-      const timeStr = student.times[weekdayName];
-      const [hours, minutes] = timeStr.split(':').map(Number);
+      // Check if entry exists for today
+      const todayDateString = new Date().toISOString().split('T')[0];
+      const entries = await storageService.getClassEntries(student.id);
+      const todayEntry = entries.find(entry => entry.date === todayDateString);
+
+      const [hours, minutes] = time.split(':').map(Number);
       const classTime = new Date();
       classTime.setHours(hours, minutes, 0, 0);
 
@@ -62,7 +62,12 @@ function TodayStudentCard({ student, onPress, onEditSchedule }: { student: Stude
       let diff = classTime.getTime() - now.getTime();
 
       if (diff < 0) {
-        setTimeRemaining('Class time started');
+        // Class time has passed
+        if (todayEntry) {
+          setTimeRemaining('Class Finished');
+        } else {
+          setTimeRemaining('Class time started');
+        }
         return;
       }
 
@@ -80,17 +85,56 @@ function TodayStudentCard({ student, onPress, onEditSchedule }: { student: Stude
     const interval = setInterval(updateTimeRemaining, 60000); // Update every minute
 
     return () => clearInterval(interval);
-  }, [student]);
+  }, [student, time]);
+
+  // Refresh status when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const updateTimeRemaining = async () => {
+        if (!time) {
+          setTimeRemaining('');
+          return;
+        }
+
+        // Check if entry exists for today
+        const todayDateString = new Date().toISOString().split('T')[0];
+        const entries = await storageService.getClassEntries(student.id);
+        const todayEntry = entries.find(entry => entry.date === todayDateString);
+
+        const [hours, minutes] = time.split(':').map(Number);
+        const classTime = new Date();
+        classTime.setHours(hours, minutes, 0, 0);
+
+        const now = new Date();
+        let diff = classTime.getTime() - now.getTime();
+
+        if (diff < 0) {
+          // Class time has passed
+          if (todayEntry) {
+            setTimeRemaining('Class Finished');
+          } else {
+            setTimeRemaining('Class time started');
+          }
+          return;
+        }
+
+        const hoursRemaining = Math.floor(diff / (1000 * 60 * 60));
+        const minutesRemaining = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+        if (hoursRemaining > 0) {
+          setTimeRemaining(`${hoursRemaining}h ${minutesRemaining}m remaining`);
+        } else {
+          setTimeRemaining(`${minutesRemaining}m remaining`);
+        }
+      };
+      updateTimeRemaining();
+    }, [student, time])
+  );
 
   const getTodayTime = (): string => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
+    if (!time) return '';
     
-    if (!student.times?.[weekdayName]) return '';
-    
-    const timeStr = student.times[weekdayName];
-    const [hours, minutes] = timeStr.split(':').map(Number);
+    const [hours, minutes] = time.split(':').map(Number);
     const date = new Date();
     date.setHours(hours, minutes);
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -135,8 +179,15 @@ function TodayStudentCard({ student, onPress, onEditSchedule }: { student: Stude
   );
 }
 
+interface TodayStudent {
+  student: Student;
+  time: string; // 24h format
+  isOneTime: boolean; // true if from one-time schedule, false if from weekly schedule
+}
+
 export default function OverviewScreen() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [oneTimeSchedules, setOneTimeSchedules] = useState<OneTimeSchedule[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -148,34 +199,94 @@ export default function OverviewScreen() {
     setStudents(data);
   };
 
+  const loadOneTimeSchedules = async () => {
+    const schedules = await storageService.getOneTimeSchedules();
+    setOneTimeSchedules(schedules);
+  };
+
   useEffect(() => {
     loadStudents();
+    loadOneTimeSchedules();
   }, []);
 
   // Reload data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadStudents();
+      loadOneTimeSchedules();
     }, [])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadStudents();
+    await loadOneTimeSchedules();
     setRefreshing(false);
   };
 
-  const todayStudents = useMemo(() => {
+  const todayStudents = useMemo((): TodayStudent[] => {
     const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
     const dayOfWeek = today.getDay();
     const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
     
-    return students.filter(student => 
-      student.weekdays.includes(weekdayName) && student.times?.[weekdayName]
-    );
-  }, [students]);
-  const tabBarHeight = 20 + insets.bottom;
-  const fabBottomPosition = tabBarHeight; // Positioned at the bottom navigation bar level
+    const result: TodayStudent[] = [];
+    const addedStudentIds = new Set<string>();
+    
+    // Add weekly schedule students
+    students.forEach(student => {
+      if (student.weekdays.includes(weekdayName) && student.times?.[weekdayName]) {
+        result.push({
+          student,
+          time: student.times[weekdayName],
+          isOneTime: false,
+        });
+        addedStudentIds.add(student.id);
+      }
+    });
+    
+    // Handle one-time schedules
+    oneTimeSchedules.forEach(schedule => {
+      if (schedule.date === todayString) {
+        const student = students.find(s => s.id === schedule.studentId);
+        if (student) {
+          // If one-time schedule has empty time, it means weekly was removed - skip it
+          if (!schedule.time || schedule.time.trim() === '') {
+            // Remove from result if it was added from weekly schedule
+            const index = result.findIndex(item => item.student.id === schedule.studentId);
+            if (index >= 0) {
+              result.splice(index, 1);
+              addedStudentIds.delete(schedule.studentId);
+            }
+            return;
+          }
+          
+          // If one-time schedule has valid time
+          const index = result.findIndex(item => item.student.id === schedule.studentId && !item.isOneTime);
+          if (index >= 0) {
+            // Replace weekly schedule with one-time schedule
+            result[index] = {
+              student,
+              time: schedule.time,
+              isOneTime: true,
+            };
+          } else if (!addedStudentIds.has(schedule.studentId)) {
+            // Add new one-time schedule
+            result.push({
+              student,
+              time: schedule.time,
+              isOneTime: true,
+            });
+            addedStudentIds.add(schedule.studentId);
+          }
+        }
+      }
+    });
+    
+    return result;
+  }, [students, oneTimeSchedules]);
+  const tabBarHeight = 60 + insets.bottom; // Match tab bar height from _layout.tsx
+  const fabBottomPosition = tabBarHeight + 16; // 16px above tab bar for consistent positioning
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top, minHeight: screenHeight }]}>
@@ -211,12 +322,14 @@ export default function OverviewScreen() {
           )}
         </View>
 
-        {todayStudents.map((student) => (
+        {todayStudents.map((item) => (
           <TodayStudentCard
-            key={student.id}
-            student={student}
-            onPress={() => router.push(`/student/${student.id}`)}
-            onEditSchedule={() => router.push(`/edit-student/${student.id}`)}
+            key={item.student.id}
+            student={item.student}
+            time={item.time}
+            isOneTime={item.isOneTime}
+            onPress={() => router.push(`/student/${item.student.id}`)}
+            onEditSchedule={() => router.push(`/edit-student/${item.student.id}`)}
           />
         ))}
       </ScrollView>

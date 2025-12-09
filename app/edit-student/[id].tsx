@@ -23,8 +23,11 @@ export default function EditStudentScreen() {
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [times, setTimes] = useState<Record<string, string>>({});
   const [classesPerCycle, setClassesPerCycle] = useState<string>('12');
+  const [initialClassesCompleted, setInitialClassesCompleted] = useState<string>('0');
+  const [tuitionFee, setTuitionFee] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const colorScheme = useColorScheme();
 
   useEffect(() => {
     loadStudent();
@@ -38,6 +41,8 @@ export default function EditStudentScreen() {
       setName(found.name);
       setSelectedDays(found.weekdays);
       setClassesPerCycle((found.classesPerCycle || 12).toString());
+      setInitialClassesCompleted((found.initialClassesCompleted || 0).toString());
+      setTuitionFee(found.tuitionFee ? found.tuitionFee.toString() : '');
       // Handle migration from old 'time' to new 'times' format
       if (found.times) {
         setTimes(found.times);
@@ -119,6 +124,27 @@ export default function EditStudentScreen() {
       return;
     }
 
+    const initialClassesNum = parseInt(initialClassesCompleted, 10);
+    if (isNaN(initialClassesNum) || initialClassesNum < 0) {
+      Alert.alert('Error', 'Please enter a valid number of initial classes completed (minimum 0)');
+      return;
+    }
+
+    if (initialClassesNum > classesPerCycleNum) {
+      Alert.alert('Error', 'Initial classes completed cannot exceed classes per cycle');
+      return;
+    }
+
+    // Validate tuition fee if provided
+    let tuitionFeeNum: number | undefined;
+    if (tuitionFee.trim()) {
+      tuitionFeeNum = parseFloat(tuitionFee);
+      if (isNaN(tuitionFeeNum) || tuitionFeeNum < 0) {
+        Alert.alert('Error', 'Please enter a valid tuition fee (minimum 0)');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const updatedStudent: Student = {
@@ -127,6 +153,8 @@ export default function EditStudentScreen() {
         weekdays: selectedDays,
         times: times,
         classesPerCycle: classesPerCycleNum,
+        initialClassesCompleted: initialClassesNum,
+        tuitionFee: tuitionFeeNum,
       };
       await storageService.saveStudent(updatedStudent);
       // Reschedule notifications
@@ -153,7 +181,7 @@ export default function EditStudentScreen() {
             await notificationService.cancelNotificationsForStudent(id!);
             await storageService.deleteStudent(id!);
             router.replace('/(tabs)');
-          } catch (error) {
+          } catch {
             Alert.alert('Error', 'Failed to delete student');
           }
         },
@@ -170,7 +198,7 @@ function DeleteButton({ onPress }: { onPress: () => void }) {
       title="Delete Student"
       onPress={onPress}
       variant="outline"
-      style={[styles.button, { borderColor: colors.error }]}
+      style={[styles.button, { borderColor: colors.error }] as any}
       textStyle={{ color: colors.error }}
     />
   );
@@ -240,6 +268,34 @@ function DeleteButton({ onPress }: { onPress: () => void }) {
             keyboardType="numeric"
           />
 
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Initial Progress
+          </ThemedText>
+          <Input
+            label="Classes Already Completed"
+            value={initialClassesCompleted}
+            onChangeText={setInitialClassesCompleted}
+            placeholder="e.g., 4"
+            keyboardType="numeric"
+          />
+          <ThemedText style={[styles.hintText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+            Number of classes already completed when this student was added.
+          </ThemedText>
+
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Tuition Fee
+          </ThemedText>
+          <Input
+            label="Monthly Tuition Fee (Optional)"
+            value={tuitionFee}
+            onChangeText={setTuitionFee}
+            placeholder="e.g., 5000"
+            keyboardType="numeric"
+          />
+          <ThemedText style={[styles.hintText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+            Enter the monthly tuition fee for this student. This will be used for fee tracking.
+          </ThemedText>
+
           <Button
             title="Save Changes"
             onPress={handleSave}
@@ -285,5 +341,11 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 20,
+  },
+  hintText: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
 });

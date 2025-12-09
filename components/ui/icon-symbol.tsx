@@ -24,6 +24,9 @@ const MAPPING = {
   'book.fill': 'book',
   'trash': 'delete',
   'xmark': 'close',
+  'arrow.clockwise': 'refresh',
+  'arrow.counterclockwise': 'undo',
+  'checkmark': 'check',
 } as IconMapping;
 
 /**
