@@ -2,7 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import 'react-native-reanimated';
 
@@ -20,6 +20,8 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [isReady, setIsReady] = useState(false);
+  const rescheduleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isReschedulingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,11 +39,19 @@ export default function RootLayout() {
           
           // Reschedule notifications in background (non-blocking)
           // Use setTimeout to ensure it doesn't block app startup
-          setTimeout(() => {
-            notificationService.rescheduleAllNotifications().catch(() => {
-              // Silently fail - can retry later
-            });
-          }, 2000);
+          // Only reschedule if not already rescheduling
+          if (!isReschedulingRef.current) {
+            isReschedulingRef.current = true;
+            setTimeout(() => {
+              notificationService.rescheduleAllNotifications()
+                .catch(() => {
+                  // Silently fail - can retry later
+                })
+                .finally(() => {
+                  isReschedulingRef.current = false;
+                });
+            }, 2000);
+          }
         }
         
         // Minimum splash screen time for smooth UX
@@ -79,18 +89,33 @@ export default function RootLayout() {
 
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        // App came to foreground - optionally refresh notifications
-        if (notificationService.isAvailable()) {
-          // Reschedule in background without blocking
-          setTimeout(() => {
-            notificationService.rescheduleAllNotifications().catch(() => {});
-          }, 1000);
+        // App came to foreground - refresh notifications only if not already rescheduling
+        if (notificationService.isAvailable() && !isReschedulingRef.current) {
+          // Clear any pending reschedule
+          if (rescheduleTimeoutRef.current) {
+            clearTimeout(rescheduleTimeoutRef.current);
+          }
+          
+          // Debounce rescheduling to prevent duplicates
+          rescheduleTimeoutRef.current = setTimeout(() => {
+            if (!isReschedulingRef.current) {
+              isReschedulingRef.current = true;
+              notificationService.rescheduleAllNotifications()
+                .catch(() => {})
+                .finally(() => {
+                  isReschedulingRef.current = false;
+                });
+            }
+          }, 2000);
         }
       }
     });
 
     return () => {
       subscription.remove();
+      if (rescheduleTimeoutRef.current) {
+        clearTimeout(rescheduleTimeoutRef.current);
+      }
     };
   }, [isReady]);
 

@@ -22,18 +22,24 @@ export default function TabLayout() {
           borderTopColor: colors.border,
           borderTopWidth: 1,
           height: 60 + insets.bottom,
-          paddingBottom: insets.bottom + 5,
-          paddingTop: 5,
+          paddingBottom: insets.bottom,
+          paddingTop: 8,
         },
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingVertical: 4,
+        },
         tabBarIconStyle: {
-          marginTop: 2,
+          marginTop: 0,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
           marginTop: 2,
+          marginBottom: 0,
         },
       }}>
       <Tabs.Screen
@@ -100,6 +106,25 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => (
             <Image
               source={require('@/assets/images/fees.png')}
+              style={[
+                styles.tabIcon,
+                { 
+                  opacity: focused ? 1 : 0.6,
+                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                },
+              ]}
+              resizeMode="contain"
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="guideline"
+        options={{
+          title: 'Guideline',
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={require('@/assets/images/tabs/guideline.png')}
               style={[
                 styles.tabIcon,
                 { 

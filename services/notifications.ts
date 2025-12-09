@@ -97,7 +97,7 @@ export const notificationService = {
         for (let weekOffset = 0; weekOffset < 4; weekOffset++) {
           const notificationDate = this.getNextDateForWeekday(weekdayIndex, weekOffset, hours, minutes);
           
-          // Schedule notification 30 minutes before
+          // Schedule notification 1 hour before
           const notificationTime = new Date(notificationDate);
           notificationTime.setHours(notificationTime.getHours() - 1);
 
@@ -106,7 +106,7 @@ export const notificationService = {
             await Notifications.scheduleNotificationAsync({
               content: {
                 title: 'Tuition Reminder',
-                body: `You have a class with ${student.name} in 30 minutes`,
+                body: `You have a class with ${student.name} in 1 hour`,
                 sound: true,
                 priority: Notifications.AndroidNotificationPriority.HIGH,
               },

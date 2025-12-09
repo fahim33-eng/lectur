@@ -22,6 +22,11 @@ export default function FeesScreen() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
   const [showChart, setShowChart] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
+  const [showAddFeeModal, setShowAddFeeModal] = useState(false);
+  const [studentModalFor, setStudentModalFor] = useState<'filter' | 'manual'>('filter');
+  const [manualStudentId, setManualStudentId] = useState<string>('');
+  const [manualAmount, setManualAmount] = useState<string>('');
+  const [manualMonth, setManualMonth] = useState<string>('');
   const router = useRouter();
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
@@ -110,7 +115,7 @@ export default function FeesScreen() {
   const screenWidth = Dimensions.get('window').width;
 
   const formatCurrency = (amount: number) => {
-    return `₹${amount.toLocaleString('en-IN')}`;
+    return `৳${amount.toLocaleString('en-IN')}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -120,6 +125,66 @@ export default function FeesScreen() {
       day: 'numeric',
       year: 'numeric',
     });
+  };
+
+  const handleStatusUpdate = async (entry: FeeEntry) => {
+    const newStatus: 'Payment Due' | 'Completed' = entry.status === 'Completed' ? 'Payment Due' : 'Completed';
+    const updatedEntry: FeeEntry = {
+      ...entry,
+      status: newStatus,
+    };
+    try {
+      await storageService.saveFeeEntry(updatedEntry);
+      await loadData();
+      Alert.alert('Success', `Payment status updated to ${newStatus}`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update payment status');
+      console.error(error);
+    }
+  };
+
+  const handleAddManualFee = async () => {
+    if (!manualStudentId) {
+      Alert.alert('Error', 'Please select a student');
+      return;
+    }
+    if (!manualAmount || isNaN(Number(manualAmount)) || Number(manualAmount) <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    if (!manualMonth.trim()) {
+      Alert.alert('Error', 'Please enter a month/cycle');
+      return;
+    }
+
+    const selectedStudent = students.find(s => s.id === manualStudentId);
+    if (!selectedStudent) {
+      Alert.alert('Error', 'Selected student not found');
+      return;
+    }
+
+    try {
+      const feeEntry: FeeEntry = {
+        id: Date.now().toString() + '_fee_manual',
+        studentId: manualStudentId,
+        studentName: selectedStudent.name,
+        amount: Number(manualAmount),
+        month: manualMonth.trim(),
+        date: new Date().toISOString().split('T')[0],
+        status: 'Payment Due',
+        createdAt: new Date().toISOString(),
+      };
+      await storageService.saveFeeEntry(feeEntry);
+      await loadData();
+      setShowAddFeeModal(false);
+      setManualStudentId('');
+      setManualAmount('');
+      setManualMonth('');
+      Alert.alert('Success', 'Fee entry added successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add fee entry');
+      console.error(error);
+    }
   };
 
   return (
@@ -135,7 +200,10 @@ export default function FeesScreen() {
           </ThemedText>
           <TouchableOpacity
             style={[styles.selectContainer, { borderColor: colors.border }]}
-            onPress={() => setShowStudentModal(true)}
+            onPress={() => {
+              setStudentModalFor('filter');
+              setShowStudentModal(true);
+            }}
           >
             <View style={styles.selectWrapper}>
               <ThemedText style={styles.selectText}>
@@ -159,33 +227,53 @@ export default function FeesScreen() {
               onPress={() => setShowStudentModal(false)}
             >
               <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
-                <TouchableOpacity
-                  style={[styles.modalOption, selectedStudentId === 'all' && { backgroundColor: colors.tint + '20' }]}
-                  onPress={() => {
-                    setSelectedStudentId('all');
-                    setShowStudentModal(false);
-                  }}
-                >
-                  <ThemedText style={styles.modalOptionText}>All Students</ThemedText>
-                  {selectedStudentId === 'all' && (
-                    <IconSymbol name="checkmark" size={20} color={colors.tint} />
-                  )}
-                </TouchableOpacity>
-                {students.map(student => (
-                  <TouchableOpacity
-                    key={student.id}
-                    style={[styles.modalOption, selectedStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
-                    onPress={() => {
-                      setSelectedStudentId(student.id);
-                      setShowStudentModal(false);
-                    }}
-                  >
-                    <ThemedText style={styles.modalOptionText}>{student.name}</ThemedText>
-                    {selectedStudentId === student.id && (
-                      <IconSymbol name="checkmark" size={20} color={colors.tint} />
-                    )}
-                  </TouchableOpacity>
-                ))}
+                {studentModalFor === 'filter' ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.modalOption, selectedStudentId === 'all' && { backgroundColor: colors.tint + '20' }]}
+                      onPress={() => {
+                        setSelectedStudentId('all');
+                        setShowStudentModal(false);
+                      }}
+                    >
+                      <ThemedText style={styles.modalOptionText}>All Students</ThemedText>
+                      {selectedStudentId === 'all' && (
+                        <IconSymbol name="checkmark" size={20} color={colors.tint} />
+                      )}
+                    </TouchableOpacity>
+                    {students.map(student => (
+                      <TouchableOpacity
+                        key={student.id}
+                        style={[styles.modalOption, selectedStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
+                        onPress={() => {
+                          setSelectedStudentId(student.id);
+                          setShowStudentModal(false);
+                        }}
+                      >
+                        <ThemedText style={styles.modalOptionText}>{student.name}</ThemedText>
+                        {selectedStudentId === student.id && (
+                          <IconSymbol name="checkmark" size={20} color={colors.tint} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                ) : (
+                  students.map(student => (
+                    <TouchableOpacity
+                      key={student.id}
+                      style={[styles.modalOption, manualStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
+                      onPress={() => {
+                        setManualStudentId(student.id);
+                        setShowStudentModal(false);
+                      }}
+                    >
+                      <ThemedText style={styles.modalOptionText}>{student.name}</ThemedText>
+                      {manualStudentId === student.id && (
+                        <IconSymbol name="checkmark" size={20} color={colors.tint} />
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
               </View>
             </TouchableOpacity>
           </Modal>
@@ -195,21 +283,30 @@ export default function FeesScreen() {
           <ThemedText type="title" style={styles.title}>
             Fee Records
           </ThemedText>
-          {sortedEntries.length > 0 && (
+          <View style={styles.headerButtons}>
             <TouchableOpacity
-              onPress={() => setShowChart(!showChart)}
-              style={[styles.chartButton, { backgroundColor: colors.tint + '20' }]}
+              onPress={() => setShowAddFeeModal(true)}
+              style={[styles.addButton, { backgroundColor: colors.tint }]}
             >
-              <IconSymbol 
-                name={showChart ? "chart.bar.fill" : "chart.line.uptrend.xyaxis"} 
-                size={20} 
-                color={colors.tint} 
-              />
-              <ThemedText style={[styles.chartButtonText, { color: colors.tint }]}>
-                {showChart ? 'Hide Chart' : 'Show Chart'}
-              </ThemedText>
+              <IconSymbol name="plus" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.addButtonText}>Add Fee</ThemedText>
             </TouchableOpacity>
-          )}
+            {sortedEntries.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setShowChart(!showChart)}
+                style={[styles.chartButton, { backgroundColor: colors.tint + '20' }]}
+              >
+                <IconSymbol 
+                  name={showChart ? "chart.bar.fill" : "chart.line.uptrend.xyaxis"} 
+                  size={20} 
+                  color={colors.tint} 
+                />
+                <ThemedText style={[styles.chartButtonText, { color: colors.tint }]}>
+                  {showChart ? 'Hide Chart' : 'Show Chart'}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {showChart && sortedEntries.length > 0 && (
@@ -282,6 +379,11 @@ export default function FeesScreen() {
                   Amount
                 </ThemedText>
               </View>
+              <View style={styles.colStatus}>
+                <ThemedText style={[styles.tableHeaderText, { color: colors.tint }]}>
+                  Status
+                </ThemedText>
+              </View>
               <View style={styles.colDate}>
                 <ThemedText style={[styles.tableHeaderText, { color: colors.tint }]}>
                   Date
@@ -309,6 +411,20 @@ export default function FeesScreen() {
                     {formatCurrency(entry.amount)}
                   </ThemedText>
                 </View>
+                <TouchableOpacity 
+                  style={styles.colStatus}
+                  onPress={() => handleStatusUpdate(entry)}
+                >
+                  <ThemedText style={[
+                    styles.tableCellText, 
+                    { 
+                      color: (entry.status || 'Payment Due') === 'Completed' ? '#4CAF50' : '#FF9800',
+                      fontWeight: '600'
+                    }
+                  ]}>
+                    {entry.status || 'Payment Due'}
+                  </ThemedText>
+                </TouchableOpacity>
                 <View style={styles.colDate}>
                   <ThemedText style={[styles.tableCellText, { color: colors.textSecondary }]}>
                     {formatDate(entry.date)}
@@ -329,6 +445,89 @@ export default function FeesScreen() {
             </ThemedText>
           </Card>
         )}
+
+        {/* Add Manual Fee Modal */}
+        <Modal
+          visible={showAddFeeModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => {
+            setShowAddFeeModal(false);
+            setManualStudentId('');
+            setManualAmount('');
+            setManualMonth('');
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { backgroundColor: colors.cardBackground }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <ThemedText type="title" style={styles.modalTitle}>
+                Add Manual Fee Entry
+              </ThemedText>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowAddFeeModal(false);
+                    setManualStudentId('');
+                    setManualAmount('');
+                    setManualMonth('');
+                  }}
+                  style={styles.modalCloseButton}
+                >
+                  <IconSymbol name="xmark" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalContent}>
+                <ThemedText style={[styles.modalLabel, { color: colors.textSecondary }]}>
+                  Select Student
+                </ThemedText>
+                <TouchableOpacity
+                  style={[styles.selectContainer, { borderColor: colors.border }]}
+                  onPress={() => {
+                    setStudentModalFor('manual');
+                    setShowStudentModal(true);
+                  }}
+                >
+                  <View style={styles.selectWrapper}>
+                    <ThemedText style={[styles.selectText, { color: manualStudentId ? colors.text : colors.textSecondary }]}>
+                      {manualStudentId 
+                        ? students.find(s => s.id === manualStudentId)?.name || 'Select Student'
+                        : 'Select Student'}
+                    </ThemedText>
+                    <IconSymbol name="chevron.down" size={16} color={colors.textSecondary} />
+                  </View>
+                </TouchableOpacity>
+
+                <ThemedText style={[styles.modalLabel, { color: colors.textSecondary, marginTop: 16 }]}>
+                  Amount (৳)
+                </ThemedText>
+                <Input
+                  value={manualAmount}
+                  onChangeText={setManualAmount}
+                  placeholder="Enter amount"
+                  keyboardType="numeric"
+                  style={styles.modalInput}
+                />
+
+                <ThemedText style={[styles.modalLabel, { color: colors.textSecondary, marginTop: 16 }]}>
+                  Month/Cycle
+                </ThemedText>
+                <Input
+                  value={manualMonth}
+                  onChangeText={setManualMonth}
+                  placeholder="e.g., December 2024, Cycle 1"
+                  style={styles.modalInput}
+                />
+
+                <Button
+                  title="Add Fee Entry"
+                  onPress={handleAddManualFee}
+                  style={styles.modalButton}
+                />
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </ThemedView>
   );
@@ -396,6 +595,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   title: {
     fontWeight: '700',
@@ -468,6 +685,10 @@ const styles = StyleSheet.create({
     flex: 1.5,
     alignItems: 'flex-end',
   },
+  colStatus: {
+    flex: 1.5,
+    alignItems: 'center',
+  },
   colDate: {
     flex: 1.5,
     alignItems: 'flex-end',
@@ -488,6 +709,45 @@ const styles = StyleSheet.create({
   summaryAmount: {
     fontSize: 32,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontWeight: '700',
+    fontSize: 20,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    padding: 20,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  modalInput: {
+    marginBottom: 0,
+  },
+  modalButton: {
+    marginTop: 24,
   },
 });
 

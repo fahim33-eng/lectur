@@ -259,6 +259,7 @@ export default function StudentDetailScreen() {
             amount: student.tuitionFee,
             month: month,
             date: today,
+            status: 'Payment Due',
             createdAt: new Date().toISOString(),
           };
           await storageService.saveFeeEntry(feeEntry);

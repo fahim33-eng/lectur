@@ -33,6 +33,7 @@ export interface FeeEntry {
   amount: number; // Fee amount
   month: string; // Month/cycle identifier (e.g., "2024-01" or "Cycle 1")
   date: string; // ISO date string when fee was recorded
+  status?: 'Payment Due' | 'Completed'; // Payment status (default: 'Payment Due')
   createdAt: string;
 }
 

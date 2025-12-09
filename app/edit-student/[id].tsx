@@ -157,8 +157,7 @@ export default function EditStudentScreen() {
         tuitionFee: tuitionFeeNum,
       };
       await storageService.saveStudent(updatedStudent);
-      // Reschedule notifications
-      await notificationService.cancelNotificationsForStudent(updatedStudent.id);
+      // Reschedule notifications (scheduleNotificationsForStudent already cancels existing ones)
       await notificationService.scheduleNotificationsForStudent(updatedStudent);
       router.back();
     } catch (error) {
