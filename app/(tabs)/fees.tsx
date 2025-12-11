@@ -222,58 +222,77 @@ export default function FeesScreen() {
             onRequestClose={() => setShowStudentModal(false)}
           >
             <TouchableOpacity
-              style={styles.modalOverlay}
+              style={styles.studentModalOverlay}
               activeOpacity={1}
               onPress={() => setShowStudentModal(false)}
             >
-              <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
-                {studentModalFor === 'filter' ? (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.modalOption, selectedStudentId === 'all' && { backgroundColor: colors.tint + '20' }]}
-                      onPress={() => {
-                        setSelectedStudentId('all');
-                        setShowStudentModal(false);
-                      }}
-                    >
-                      <ThemedText style={styles.modalOptionText}>All Students</ThemedText>
-                      {selectedStudentId === 'all' && (
-                        <IconSymbol name="checkmark" size={20} color={colors.tint} />
-                      )}
-                    </TouchableOpacity>
-                    {students.map(student => (
+              <View 
+                style={[styles.studentModalContent, { backgroundColor: colors.cardBackground }]}
+                onStartShouldSetResponder={() => true}
+              >
+                <View style={[styles.studentModalHeader, { borderBottomColor: colors.border }]}>
+                  <ThemedText type="subtitle" style={styles.studentModalTitle}>
+                    {studentModalFor === 'filter' ? 'Select Student' : 'Select Student'}
+                  </ThemedText>
+                  <TouchableOpacity
+                    onPress={() => setShowStudentModal(false)}
+                    style={styles.studentModalCloseButton}
+                  >
+                    <IconSymbol name="xmark" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+                <ScrollView 
+                  style={styles.studentModalScrollView}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {studentModalFor === 'filter' ? (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.modalOption, selectedStudentId === 'all' && { backgroundColor: colors.tint + '20' }]}
+                        onPress={() => {
+                          setSelectedStudentId('all');
+                          setShowStudentModal(false);
+                        }}
+                      >
+                        <ThemedText style={styles.modalOptionText}>All Students</ThemedText>
+                        {selectedStudentId === 'all' && (
+                          <IconSymbol name="checkmark" size={20} color={colors.tint} />
+                        )}
+                      </TouchableOpacity>
+                      {students.map(student => (
+                        <TouchableOpacity
+                          key={student.id}
+                          style={[styles.modalOption, selectedStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
+                          onPress={() => {
+                            setSelectedStudentId(student.id);
+                            setShowStudentModal(false);
+                          }}
+                        >
+                          <ThemedText style={styles.modalOptionText}>{student.name}</ThemedText>
+                          {selectedStudentId === student.id && (
+                            <IconSymbol name="checkmark" size={20} color={colors.tint} />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  ) : (
+                    students.map(student => (
                       <TouchableOpacity
                         key={student.id}
-                        style={[styles.modalOption, selectedStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
+                        style={[styles.modalOption, manualStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
                         onPress={() => {
-                          setSelectedStudentId(student.id);
+                          setManualStudentId(student.id);
                           setShowStudentModal(false);
                         }}
                       >
                         <ThemedText style={styles.modalOptionText}>{student.name}</ThemedText>
-                        {selectedStudentId === student.id && (
+                        {manualStudentId === student.id && (
                           <IconSymbol name="checkmark" size={20} color={colors.tint} />
                         )}
                       </TouchableOpacity>
-                    ))}
-                  </>
-                ) : (
-                  students.map(student => (
-                    <TouchableOpacity
-                      key={student.id}
-                      style={[styles.modalOption, manualStudentId === student.id && { backgroundColor: colors.tint + '20' }]}
-                      onPress={() => {
-                        setManualStudentId(student.id);
-                        setShowStudentModal(false);
-                      }}
-                    >
-                      <ThemedText style={styles.modalOptionText}>{student.name}</ThemedText>
-                      {manualStudentId === student.id && (
-                        <IconSymbol name="checkmark" size={20} color={colors.tint} />
-                      )}
-                    </TouchableOpacity>
-                  ))
-                )}
+                    ))
+                  )}
+                </ScrollView>
               </View>
             </TouchableOpacity>
           </Modal>
@@ -568,6 +587,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  studentModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  studentModalContent: {
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
+  studentModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  studentModalTitle: {
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  studentModalCloseButton: {
+    padding: 4,
+  },
+  studentModalScrollView: {
+    maxHeight: 400,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -586,6 +636,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
+    marginHorizontal: 8,
+    marginVertical: 4,
   },
   modalOptionText: {
     fontSize: 16,

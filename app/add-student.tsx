@@ -24,9 +24,13 @@ export default function AddStudentScreen() {
   const [classesPerCycle, setClassesPerCycle] = useState<string>('12');
   const [initialClassesCompleted, setInitialClassesCompleted] = useState<string>('0');
   const [tuitionFee, setTuitionFee] = useState<string>('');
+  const [mobileNumber, setMobileNumber] = useState<string>('');
+  const [mobileError, setMobileError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
 
   useEffect(() => {
     // Request notification permissions on mount (only if available)
@@ -53,6 +57,40 @@ export default function AddStudentScreen() {
 
   const handleTimeChange = (day: string, time: string) => {
     setTimes({ ...times, [day]: time });
+  };
+
+  const validateBangladeshiMobile = (number: string): boolean => {
+    if (!number.trim()) return true; // Optional field
+    
+    // Remove spaces and dashes, but keep plus for checking
+    let cleaned = number.replace(/[\s\-]/g, '');
+    
+    // Check if starts with +8801 or 01
+    if (cleaned.startsWith('+8801')) {
+      // Remove +8801 prefix and check if remaining has more than 8 characters
+      const remaining = cleaned.substring(5); // +8801 is 5 chars
+      return remaining.length > 8 && /^\d+$/.test(remaining);
+    } else if (cleaned.startsWith('8801')) {
+      // Remove 8801 prefix and check if remaining has more than 8 characters
+      const remaining = cleaned.substring(4); // 8801 is 4 chars
+      return remaining.length > 8 && /^\d+$/.test(remaining);
+    } else if (cleaned.startsWith('01')) {
+      // Remove 01 prefix and check if remaining has more than 8 characters
+      const remaining = cleaned.substring(2); // 01 is 2 chars
+      return remaining.length > 8 && /^\d+$/.test(remaining);
+    }
+    
+    // If doesn't match expected prefixes, reject
+    return false;
+  };
+
+  const handleMobileNumberChange = (text: string) => {
+    setMobileNumber(text);
+    if (text.trim() && !validateBangladeshiMobile(text)) {
+      setMobileError('Please enter a valid Bangladeshi mobile number (e.g., 01XXXXXXXXX)');
+    } else {
+      setMobileError('');
+    }
   };
 
   const handleSave = async () => {
@@ -99,6 +137,17 @@ export default function AddStudentScreen() {
       }
     }
 
+    // Validate mobile number if provided
+    let mobileNumberValue: string | undefined;
+    if (mobileNumber.trim()) {
+      if (!validateBangladeshiMobile(mobileNumber)) {
+        Alert.alert('Error', 'Please enter a valid Bangladeshi mobile number (e.g., 01XXXXXXXXX)');
+        return;
+      }
+      // Just clean the number (remove spaces, dashes, plus) but don't manipulate it
+      mobileNumberValue = mobileNumber.replace(/[\s\-+]/g, '');
+    }
+
     setLoading(true);
     try {
       const newStudent: Student = {
@@ -109,6 +158,7 @@ export default function AddStudentScreen() {
         classesPerCycle: classesPerCycleNum,
         initialClassesCompleted: initialClassesNum,
         tuitionFee: tuitionFeeNum,
+        mobileNumber: mobileNumberValue,
         createdAt: new Date().toISOString(),
       };
       await storageService.saveStudent(newStudent);
@@ -198,9 +248,28 @@ export default function AddStudentScreen() {
             placeholder="e.g., 4"
             keyboardType="numeric"
           />
-          <ThemedText style={[styles.hintText, { color: Colors[useColorScheme() ?? 'light'].textSecondary }]}>
+          <ThemedText style={[styles.hintText, { color: colors.textSecondary }]}>
             If you&apos;ve already taken some classes before adding this student, enter the number here.
           </ThemedText>
+
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+          </ThemedText>
+          <Input
+            label="Mobile Number (Optional)"
+            value={mobileNumber}
+            onChangeText={handleMobileNumberChange}
+            placeholder="e.g., 01712345678"
+            keyboardType="phone-pad"
+          />
+          {mobileError ? (
+            <ThemedText style={[styles.errorText, { color: colors.error }]}>
+              {mobileError}
+            </ThemedText>
+          ) : (
+            <ThemedText style={[styles.hintText, { color: colors.textSecondary }]}>
+              (e.g., 01712345678 or 8801712345678)
+            </ThemedText>
+          )}
 
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             Tuition Fee
@@ -212,7 +281,7 @@ export default function AddStudentScreen() {
             placeholder="e.g., 5000"
             keyboardType="numeric"
           />
-          <ThemedText style={[styles.hintText, { color: Colors[useColorScheme() ?? 'light'].textSecondary }]}>
+          <ThemedText style={[styles.hintText, { color: colors.textSecondary }]}>
             Enter the monthly tuition fee for this student. This will be used for fee tracking.
           </ThemedText>
 
@@ -265,5 +334,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     fontStyle: 'italic',
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    fontWeight: '600',
   },
 });

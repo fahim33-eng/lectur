@@ -23,22 +23,23 @@ export default function TabLayout() {
           borderTopWidth: 1,
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom,
-          paddingTop: 8,
+          paddingTop: 0,
         },
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarItemStyle: {
           justifyContent: 'center',
           alignItems: 'center',
-          paddingVertical: 4,
+          paddingVertical: 0,
         },
         tabBarIconStyle: {
           marginTop: 0,
+          marginBottom: 0,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 2,
+          marginTop: 4,
           marginBottom: 0,
         },
       }}>
@@ -50,10 +51,9 @@ export default function TabLayout() {
             <Image
               source={require('@/assets/images/tabs/overview.png')}
               style={[
-                styles.tabIcon,
+                focused ? styles.tabIconFocused : styles.tabIcon,
                 { 
-                  opacity: focused ? 1 : 0.6,
-                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                  opacity: focused ? 1 : 0.7,
                 },
               ]}
               resizeMode="contain"
@@ -69,10 +69,9 @@ export default function TabLayout() {
             <Image
               source={require('@/assets/images/tabs/students.png')}
               style={[
-                styles.tabIcon,
+                focused ? styles.tabIconFocused : styles.tabIcon,
                 { 
-                  opacity: focused ? 1 : 0.6,
-                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                  opacity: focused ? 1 : 0.7,
                 },
               ]}
               resizeMode="contain"
@@ -88,10 +87,9 @@ export default function TabLayout() {
             <Image
               source={require('@/assets/images/tabs/calendar.png')}
               style={[
-                styles.tabIcon,
+                focused ? styles.tabIconFocused : styles.tabIcon,
                 { 
-                  opacity: focused ? 1 : 0.6,
-                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                  opacity: focused ? 1 : 0.7,
                 },
               ]}
               resizeMode="contain"
@@ -107,10 +105,9 @@ export default function TabLayout() {
             <Image
               source={require('@/assets/images/fees.png')}
               style={[
-                styles.tabIcon,
+                focused ? styles.tabIconFocused : styles.tabIcon,
                 { 
-                  opacity: focused ? 1 : 0.6,
-                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                  opacity: focused ? 1 : 0.7,
                 },
               ]}
               resizeMode="contain"
@@ -126,10 +123,9 @@ export default function TabLayout() {
             <Image
               source={require('@/assets/images/tabs/guideline.png')}
               style={[
-                styles.tabIcon,
+                focused ? styles.tabIconFocused : styles.tabIcon,
                 { 
-                  opacity: focused ? 1 : 0.6,
-                  tintColor: focused ? colors.tint : colors.tabIconDefault,
+                  opacity: focused ? 1 : 0.7,
                 },
               ]}
               resizeMode="contain"
@@ -143,7 +139,11 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabIcon: {
-    width: 24,
-    height: 24,
+    width: 26,
+    height: 26,
+  },
+  tabIconFocused: {
+    width: 28,
+    height: 28,
   },
 });

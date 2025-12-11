@@ -1,3 +1,4 @@
+import { CallModal } from '@/components/call-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
@@ -41,6 +42,7 @@ function TodayStudentCard({ student, time, isOneTime, onPress, onEditSchedule }:
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [showCallModal, setShowCallModal] = useState(false);
 
   useEffect(() => {
     const updateTimeRemaining = async () => {
@@ -166,15 +168,39 @@ function TodayStudentCard({ student, time, isOneTime, onPress, onEditSchedule }:
             </View>
           )}
         </View>
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            onEditSchedule();
-          }}
-          style={styles.editButton}>
-          <IconSymbol name="pencil" size={20} color={colors.tint} />
-        </TouchableOpacity>
+        <View style={styles.actionButtons}>
+          {student.mobileNumber && (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                setShowCallModal(true);
+              }}
+              style={styles.callButton}>
+              <Image
+                source={require('@/assets/images/call.png')}
+                style={styles.callIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onEditSchedule();
+            }}
+            style={styles.editButton}>
+            <IconSymbol name="pencil" size={20} color={colors.tint} />
+          </TouchableOpacity>
+        </View>
       </View>
+      {student.mobileNumber && (
+        <CallModal
+          visible={showCallModal}
+          onClose={() => setShowCallModal(false)}
+          studentName={student.name}
+          mobileNumber={student.mobileNumber}
+        />
+      )}
     </Card>
   );
 }
@@ -438,6 +464,18 @@ const styles = StyleSheet.create({
   timeRemaining: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  callButton: {
+    padding: 8,
+  },
+  callIcon: {
+    width: 20,
+    height: 20,
   },
   editButton: {
     padding: 8,

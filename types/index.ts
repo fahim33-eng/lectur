@@ -6,6 +6,7 @@ export interface Student {
   classesPerCycle?: number; // Number of classes per cycle/month (default: 12)
   initialClassesCompleted?: number; // Number of classes already completed when adding student (default: 0)
   tuitionFee?: number; // Optional tuition fee per cycle/month
+  mobileNumber?: string; // Optional mobile number (Bangladeshi format)
   createdAt: string;
 }
 

@@ -25,6 +25,8 @@ export default function EditStudentScreen() {
   const [classesPerCycle, setClassesPerCycle] = useState<string>('12');
   const [initialClassesCompleted, setInitialClassesCompleted] = useState<string>('0');
   const [tuitionFee, setTuitionFee] = useState<string>('');
+  const [mobileNumber, setMobileNumber] = useState<string>('');
+  const [mobileError, setMobileError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -43,6 +45,7 @@ export default function EditStudentScreen() {
       setClassesPerCycle((found.classesPerCycle || 12).toString());
       setInitialClassesCompleted((found.initialClassesCompleted || 0).toString());
       setTuitionFee(found.tuitionFee ? found.tuitionFee.toString() : '');
+      setMobileNumber(found.mobileNumber || '');
       // Handle migration from old 'time' to new 'times' format
       if (found.times) {
         setTimes(found.times);
@@ -101,6 +104,40 @@ export default function EditStudentScreen() {
     setTimes({ ...times, [day]: time });
   };
 
+  const validateBangladeshiMobile = (number: string): boolean => {
+    if (!number.trim()) return true; // Optional field
+    
+    // Remove spaces and dashes, but keep plus for checking
+    let cleaned = number.replace(/[\s\-]/g, '');
+    
+    // Check if starts with +8801 or 01
+    if (cleaned.startsWith('+8801')) {
+      // Remove +8801 prefix and check if remaining has more than 8 characters
+      const remaining = cleaned.substring(5); // +8801 is 5 chars
+      return remaining.length > 8 && /^\d+$/.test(remaining);
+    } else if (cleaned.startsWith('8801')) {
+      // Remove 8801 prefix and check if remaining has more than 8 characters
+      const remaining = cleaned.substring(4); // 8801 is 4 chars
+      return remaining.length > 8 && /^\d+$/.test(remaining);
+    } else if (cleaned.startsWith('01')) {
+      // Remove 01 prefix and check if remaining has more than 8 characters
+      const remaining = cleaned.substring(2); // 01 is 2 chars
+      return remaining.length > 8 && /^\d+$/.test(remaining);
+    }
+    
+    // If doesn't match expected prefixes, reject
+    return false;
+  };
+
+  const handleMobileNumberChange = (text: string) => {
+    setMobileNumber(text);
+    if (text.trim() && !validateBangladeshiMobile(text)) {
+      setMobileError('Please enter a valid Bangladeshi mobile number (e.g., 01XXXXXXXXX)');
+    } else {
+      setMobileError('');
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter student name');
@@ -145,6 +182,17 @@ export default function EditStudentScreen() {
       }
     }
 
+    // Validate mobile number if provided
+    let mobileNumberValue: string | undefined;
+    if (mobileNumber.trim()) {
+      if (!validateBangladeshiMobile(mobileNumber)) {
+        Alert.alert('Error', 'Please enter a valid Bangladeshi mobile number (e.g., 01XXXXXXXXX)');
+        return;
+      }
+      // Just clean the number (remove spaces, dashes, plus) but don't manipulate it
+      mobileNumberValue = mobileNumber.replace(/[\s\-+]/g, '');
+    }
+
     setLoading(true);
     try {
       const updatedStudent: Student = {
@@ -155,6 +203,7 @@ export default function EditStudentScreen() {
         classesPerCycle: classesPerCycleNum,
         initialClassesCompleted: initialClassesNum,
         tuitionFee: tuitionFeeNum,
+        mobileNumber: mobileNumberValue,
       };
       await storageService.saveStudent(updatedStudent);
       // Reschedule notifications (scheduleNotificationsForStudent already cancels existing ones)
@@ -282,6 +331,25 @@ function DeleteButton({ onPress }: { onPress: () => void }) {
           </ThemedText>
 
           <ThemedText type="subtitle" style={styles.sectionTitle}>
+          </ThemedText>
+          <Input
+            label="Mobile Number (Optional)"
+            value={mobileNumber}
+            onChangeText={handleMobileNumberChange}
+            placeholder="e.g., 01712345678"
+            keyboardType="phone-pad"
+          />
+          {mobileError ? (
+            <ThemedText style={[styles.errorText, { color: Colors[colorScheme ?? 'light'].error }]}>
+              {mobileError}
+            </ThemedText>
+          ) : (
+            <ThemedText style={[styles.hintText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+              (e.g., 01712345678 or 8801712345678)
+            </ThemedText>
+          )}
+
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
             Tuition Fee
           </ThemedText>
           <Input
@@ -346,5 +414,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     fontStyle: 'italic',
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    fontWeight: '600',
   },
 });

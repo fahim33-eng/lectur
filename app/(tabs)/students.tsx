@@ -1,3 +1,4 @@
+import { CallModal } from '@/components/call-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
@@ -105,6 +106,7 @@ export default function StudentsScreen() {
 
 function StudentCard({ student, onPress, onEditSchedule }: { student: Student; onPress: () => void; onEditSchedule: () => void }) {
   const [classCount, setClassCount] = useState(0);
+  const [showCallModal, setShowCallModal] = useState(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -165,15 +167,39 @@ function StudentCard({ student, onPress, onEditSchedule }: { student: Student; o
             {formatTimes()}
           </ThemedText>
         </View>
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            onEditSchedule();
-          }}
-          style={styles.editButton}>
-          <IconSymbol name="pencil" size={20} color={colors.tint} />
-        </TouchableOpacity>
+        <View style={styles.actionButtons}>
+          {student.mobileNumber && (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                setShowCallModal(true);
+              }}
+              style={styles.callButton}>
+              <Image
+                source={require('@/assets/images/call.png')}
+                style={styles.callIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onEditSchedule();
+            }}
+            style={styles.editButton}>
+            <IconSymbol name="pencil" size={20} color={colors.tint} />
+          </TouchableOpacity>
+        </View>
       </View>
+      {student.mobileNumber && (
+        <CallModal
+          visible={showCallModal}
+          onClose={() => setShowCallModal(false)}
+          studentName={student.name}
+          mobileNumber={student.mobileNumber}
+        />
+      )}
       <View style={styles.progressSection}>
         <View style={styles.progressHeader}>
           <ThemedText style={[styles.progressLabel, { color: colors.textSecondary }]}>
@@ -238,9 +264,20 @@ const styles = StyleSheet.create({
   studentInfo: {
     fontSize: 14,
   },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  callButton: {
+    padding: 8,
+  },
+  callIcon: {
+    width: 20,
+    height: 20,
+  },
   editButton: {
     padding: 8,
-    marginRight: 8,
   },
   badge: {
     paddingHorizontal: 10,
